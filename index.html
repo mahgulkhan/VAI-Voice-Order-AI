@@ -1,0 +1,256 @@
+<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <title>Voice Order Demo</title>
+    <style>
+      html,
+      body {
+        height: 100%;
+      }
+      body {
+        font-family: system-ui, sans-serif;
+        margin: 0 auto;
+        padding: 16px;
+        box-sizing: border-box;
+        height: 100vh;
+        display: flex;
+        flex-direction: column;
+        color: #222;
+        background-color: antiquewhite;
+        height: 100vh;
+      }
+      button {
+        font-size: 16px;
+        padding: 12px 22px;
+        border: 0;
+        border-radius: 8px;
+        cursor: pointer;
+        background: #c0392b;
+        color: #fff;
+      }
+      button:disabled {
+        background: #aaa;
+        cursor: default;
+      }
+      #chat {
+        flex: 1;
+        min-height: 0;
+        overflow-y: auto;
+        margin: 10px 0 0;
+      }
+      .msg {
+        padding: 8px 12px;
+        margin: 6px 0;
+        border-radius: 8px;
+      }
+      .bot {
+        background: darkorange;
+        font-weight: 400;
+      }
+      .you {
+        background: #f8ebdc;
+        text-align: right;
+      }
+      #status {
+        color: #666;
+        margin: 8px 0;
+        min-height: 1.2em;
+      }
+      .order {
+        border: 1px solid #ddd;
+        border-radius: 8px;
+        padding: 10px 14px;
+        margin: 10px 0;
+      }
+      .typebox {
+        display: flex;
+        gap: 8px;
+      }
+      .typebox input {
+        flex: 1;
+        padding: 8px;
+      }
+      .voice-demo {
+        font-size: 40px;
+        text-align: center;
+        color: darkorange;
+        font-family: serif;
+        margin: 0 0 10px;
+      }
+      .buttons {
+        display: flex;
+        justify-content: center;
+        align-items: center;
+        gap: 10px;
+      }
+      .split {
+        flex: 1;
+        min-height: 0;
+        display: flex;
+        justify-content: center;
+        gap: 15px;
+        margin-top: 10px;
+      }
+      .split > div {
+        flex: 1;
+        min-width: 0;
+        min-height: 0;
+        display: flex;
+        flex-direction: column;
+      }
+      #orders {
+        flex: 1;
+        min-height: 0;
+        overflow-y: auto;
+      }
+      .split h3 {
+        margin: 8px 0 0;
+      }
+    </style>
+  </head>
+  <body>
+    <h2 class="voice-demo">Voice Order Demo</h2>
+    <div class="buttons">
+      <button id="orderBtn">Order</button>
+      <button id="talkBtn" disabled>🎤 Talk</button>
+    </div>
+    <div class="split">
+      <div>
+        <div id="status"></div>
+        <div class="typebox">
+          <input id="txt" placeholder="or type instead (for testing)" /><button
+            id="sendTxt"
+            disabled
+          >
+            Send
+          </button>
+        </div>
+        <div id="chat"></div>
+      </div>
+      <div>
+        <h3>Completed orders</h3>
+        <div id="orders"></div>
+      </div>
+    </div>
+
+    <script>
+      let sid = null,
+        recorder = null,
+        chunks = [],
+        recording = false;
+      const $ = (id) => document.getElementById(id);
+
+      function add(who, text) {
+        const d = document.createElement("div");
+        d.className = "msg " + who;
+        d.textContent = text;
+        $("chat").appendChild(d);
+        $("chat").scrollTop = $("chat").scrollHeight;
+      }
+
+      function speak(text) {
+        return new Promise((res) => {
+          speechSynthesis.cancel();
+          const u = new SpeechSynthesisUtterance(text);
+          u.lang = /[\u0600-\u06FF]/.test(text) ? "ur-PK" : "en-US";
+          u.onend = res;
+          u.onerror = res;
+          speechSynthesis.speak(u);
+        });
+      }
+
+      async function handle(data) {
+        if (data.reply === null) {
+          $("status").textContent = "Didn't catch that, try again.";
+          return;
+        }
+        add("you", data.user_text);
+        add("bot", data.reply);
+        $("status").textContent = "";
+        await speak(data.reply);
+        if (data.done) {
+          finish();
+          loadOrders();
+        }
+      }
+
+      function finish() {
+        sid = null;
+        $("talkBtn").disabled = true;
+        $("sendTxt").disabled = true;
+        $("orderBtn").disabled = false;
+      }
+
+      $("orderBtn").onclick = async () => {
+        $("chat").innerHTML = "";
+        $("orderBtn").disabled = true;
+        $("status").textContent = "Connecting...";
+        const r = await (await fetch("/start", { method: "POST" })).json();
+        sid = r.session_id;
+        add("bot", r.reply);
+        $("talkBtn").disabled = false;
+        $("sendTxt").disabled = false;
+        $("status").textContent = "";
+        await speak(r.reply);
+      };
+
+      $("talkBtn").onclick = async () => {
+        if (!recording) {
+          const stream = await navigator.mediaDevices.getUserMedia({
+            audio: true,
+          });
+          recorder = new MediaRecorder(stream);
+          chunks = [];
+          recorder.ondataavailable = (e) => chunks.push(e.data);
+          recorder.onstop = async () => {
+            stream.getTracks().forEach((t) => t.stop());
+            $("status").textContent = "Thinking...";
+            const fd = new FormData();
+            fd.append("session_id", sid);
+            fd.append("audio", new Blob(chunks, { type: "audio/webm" }));
+            handle(
+              await (await fetch("/turn", { method: "POST", body: fd })).json(),
+            );
+          };
+          speechSynthesis.cancel();
+          recorder.start();
+          recording = true;
+          $("talkBtn").textContent = "⏹ Done speaking";
+          $("status").textContent = "Listening...";
+        } else {
+          recorder.stop();
+          recording = false;
+          $("talkBtn").textContent = "🎤 Talk";
+        }
+      };
+
+      $("sendTxt").onclick = async () => {
+        const t = $("txt").value.trim();
+        if (!t) return;
+        $("txt").value = "";
+        const fd = new FormData();
+        fd.append("session_id", sid);
+        fd.append("text", t);
+        handle(
+          await (await fetch("/turn", { method: "POST", body: fd })).json(),
+        );
+      };
+
+      async function loadOrders() {
+        const list = await (await fetch("/orders")).json();
+        $("orders").innerHTML =
+          list
+            .map(
+              (o) => `
+    <div class="order"><b>#${o.id}</b> · ${o.time}<br>
+    ${o.customer_name || "—"} (${o.type || "—"})<br>
+    ${o.items.map((i) => `${i.qty} × ${i.name}`).join(", ")}<br>
+    <b>Total: Rs ${o.total}</b></div>`,
+            )
+            .join("") || "<i>None yet</i>";
+      }
+      loadOrders();
+    </script>
+  </body>
+</html>
