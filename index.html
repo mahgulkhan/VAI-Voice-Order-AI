@@ -1,0 +1,535 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>VAI · Voice Order AI</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Bowlby+One&family=Poppins:wght@400;500;600;700&display=swap"
+      rel="stylesheet"
+    />
+    <style>
+      :root {
+        --ember: #ee3f24;
+        --ember-dark: #c92e15;
+        --cream: #ffefcb;
+        --leaf: #023820;
+        --yolk: #f9a11b;
+        --tofu: #fff4e6;
+        --display: "Bowlby One", "Arial Black", sans-serif;
+        --body: "Poppins", system-ui, sans-serif;
+        --r: 14px;
+      }
+      * { box-sizing: border-box; }
+      html, body { height: 100%; }
+      body {
+        margin: 0;
+        font-family: var(--body);
+        font-size: 18px;
+        color: var(--leaf);
+        background: var(--tofu);
+        display: flex;
+        flex-direction: column;
+      }
+
+      /* ---------- header ---------- */
+      header {
+        flex: none;
+        height: 76px;
+        padding: 0 32px;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        background: var(--ember);
+        border-bottom: 3px solid var(--leaf);
+      }
+      .brand { display: flex; align-items: baseline; gap: 16px; }
+      .mark {
+        font-family: var(--display);
+        font-size: 40px;
+        line-height: 1;
+        color: var(--cream);
+        letter-spacing: 0.02em;
+      }
+      .brand small {
+        font-size: 16px;
+        font-weight: 600;
+        color: var(--leaf);
+      }
+      #status {
+        display: inline-flex;
+        align-items: center;
+        gap: 10px;
+        font-size: 16px;
+        font-weight: 600;
+        padding: 9px 18px;
+        border-radius: 99px;
+        background: var(--leaf);
+        color: var(--cream);
+      }
+      #status::before {
+        content: "";
+        width: 10px;
+        height: 10px;
+        border-radius: 50%;
+        background: var(--cream);
+        opacity: 0.45;
+      }
+      #status[data-state="live"]::before { background: var(--yolk); opacity: 1; }
+      #status[data-state="busy"]::before { background: var(--cream); opacity: 1; animation: blink 0.9s steps(2) infinite; }
+      #status[data-state="rec"] { background: var(--cream); color: var(--ember-dark); }
+      #status[data-state="rec"]::before { background: var(--ember); opacity: 1; animation: blink 0.9s steps(2) infinite; }
+
+      /* ---------- layout ---------- */
+      main {
+        flex: 1;
+        min-height: 0;
+        display: grid;
+        grid-template-columns: minmax(0, 1.5fr) minmax(360px, 1fr);
+        gap: 24px;
+        padding: 24px 32px 32px;
+      }
+      section {
+        min-height: 0;
+        display: flex;
+        flex-direction: column;
+        border: 3px solid var(--leaf);
+        border-radius: var(--r);
+        overflow: hidden;
+        background: var(--tofu);
+      }
+      .label {
+        flex: none;
+        font-family: var(--display);
+        font-size: 18px;
+        letter-spacing: 0.04em;
+        padding: 14px 22px;
+        background: var(--leaf);
+        color: var(--cream);
+      }
+
+      /* ---------- transcript ---------- */
+      #chat {
+        flex: 1;
+        min-height: 0;
+        overflow-y: auto;
+        padding: 20px;
+        display: flex;
+        flex-direction: column;
+        gap: 12px;
+      }
+      .line {
+        padding: 14px 18px 16px;
+        border-radius: 12px;
+        line-height: 1.55;
+        animation: rise 0.2s ease-out;
+      }
+      .line .who {
+        font-family: var(--display);
+        font-size: 14px;
+        letter-spacing: 0.06em;
+        margin-bottom: 4px;
+      }
+      .line .txt { font-size: 19px; overflow-wrap: anywhere; }
+      .line.bot { background: var(--cream); }
+      .line.bot .who { color: var(--ember); }
+      .line.you { background: var(--leaf); color: var(--tofu); }
+      .line.you .who { color: var(--yolk); }
+      .line.pending .txt { opacity: 0.55; letter-spacing: 0.2em; }
+      .empty {
+        margin: auto;
+        text-align: center;
+        max-width: 340px;
+        font-size: 17px;
+        line-height: 1.6;
+        padding: 30px 0;
+      }
+      .empty b {
+        display: block;
+        font-family: var(--display);
+        font-weight: 400;
+        font-size: 24px;
+        color: var(--ember);
+        margin-bottom: 6px;
+      }
+
+      /* ---------- controls ---------- */
+      .controls {
+        flex: none;
+        padding: 18px 20px 20px;
+        display: grid;
+        grid-template-columns: auto auto 1fr;
+        gap: 14px;
+        background: var(--cream);
+        border-top: 3px solid var(--leaf);
+      }
+      button { font-family: var(--body); cursor: pointer; }
+      button:focus-visible, input:focus-visible { outline: 3px solid var(--yolk); outline-offset: 2px; }
+      button:disabled { opacity: 0.4; cursor: not-allowed; }
+
+      #orderBtn {
+        height: 58px;
+        padding: 0 26px;
+        font-size: 18px;
+        font-weight: 700;
+        border-radius: 12px;
+        border: 3px solid var(--leaf);
+        background: var(--leaf);
+        color: var(--cream);
+        transition: transform 0.1s;
+      }
+      #orderBtn:hover:not(:disabled) { background: #04512f; }
+      #orderBtn:active:not(:disabled) { transform: translateY(2px); }
+
+      #talkBtn {
+        height: 58px;
+        min-width: 170px;
+        padding: 0 26px;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        gap: 12px;
+        font-size: 18px;
+        font-weight: 700;
+        border-radius: 12px;
+        border: 3px solid var(--leaf);
+        background: var(--ember);
+        color: var(--cream);
+        box-shadow: 0 4px 0 var(--leaf);
+        transition: transform 0.1s, box-shadow 0.1s;
+      }
+      #talkBtn svg { width: 22px; height: 22px; flex: none; }
+      #talkBtn:hover:not(:disabled) { background: var(--ember-dark); }
+      #talkBtn:active:not(:disabled) { transform: translateY(3px); box-shadow: 0 1px 0 var(--leaf); }
+      #talkBtn.rec { background: var(--yolk); color: var(--leaf); }
+      #talkBtn.rec .ico { animation: blink 0.9s steps(2) infinite; }
+
+      .typebox { display: flex; min-width: 0; gap: 10px; }
+      .typebox input {
+        flex: 1;
+        min-width: 0;
+        height: 58px;
+        padding: 0 18px;
+        font: inherit;
+        font-size: 18px;
+        border: 3px solid var(--leaf);
+        border-radius: 12px;
+        background: var(--tofu);
+        color: var(--leaf);
+      }
+      .typebox input::placeholder { color: var(--leaf); opacity: 0.5; }
+      .typebox input:disabled { background: var(--cream); border-color: rgba(2, 56, 32, 0.3); }
+      #sendTxt {
+        height: 58px;
+        padding: 0 22px;
+        font-size: 18px;
+        font-weight: 700;
+        border-radius: 12px;
+        border: 3px solid var(--leaf);
+        background: var(--yolk);
+        color: var(--leaf);
+      }
+      #sendTxt:hover:not(:disabled) { background: #ffb340; }
+
+      /* ---------- orders ---------- */
+      #orders {
+        flex: 1;
+        min-height: 0;
+        overflow-y: auto;
+        padding: 20px;
+        display: flex;
+        flex-direction: column;
+        gap: 16px;
+        background: var(--cream);
+      }
+      .order {
+        border: 3px solid var(--leaf);
+        border-radius: 12px;
+        overflow: hidden;
+        background: var(--tofu);
+        animation: rise 0.25s ease-out;
+      }
+      .order-head {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        padding: 10px 16px;
+        background: var(--leaf);
+        color: var(--cream);
+      }
+      .order-head b { font-family: var(--display); font-weight: 400; font-size: 20px; color: var(--yolk); }
+      .order-head span { font-size: 15px; font-weight: 500; }
+      .order-body { padding: 14px 16px 6px; }
+      .order .who { font-size: 20px; font-weight: 700; display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+      .order .who span {
+        font-family: var(--display);
+        font-weight: 400;
+        font-size: 13px;
+        letter-spacing: 0.05em;
+        text-transform: uppercase;
+        padding: 4px 10px 3px;
+        border-radius: 99px;
+        background: var(--ember);
+        color: var(--cream);
+      }
+      .order ul { list-style: none; margin: 10px 0 8px; padding: 0; }
+      .order li { display: flex; gap: 12px; padding: 5px 0; font-size: 18px; }
+      .order li .q { font-weight: 700; color: var(--ember); min-width: 36px; }
+      .order-total {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        padding: 12px 16px;
+        background: var(--yolk);
+        border-top: 3px solid var(--leaf);
+        font-family: var(--display);
+        font-size: 20px;
+      }
+
+      @keyframes rise { from { opacity: 0; transform: translateY(6px); } }
+      @keyframes blink { 50% { opacity: 0.2; } }
+      @media (prefers-reduced-motion: reduce) { * { animation: none !important; } }
+
+      @media (max-width: 900px) {
+        body { height: auto; min-height: 100%; }
+        header { padding: 0 18px; }
+        main { grid-template-columns: 1fr; padding: 16px; }
+        #chat { min-height: 340px; }
+        .controls { grid-template-columns: 1fr 1fr; }
+        .typebox { grid-column: 1 / -1; }
+        #orders { max-height: 420px; }
+      }
+    </style>
+  </head>
+  <body>
+    <header>
+      <div class="brand">
+        <div class="mark">VAI</div>
+        <small>Voice Order AI</small>
+      </div>
+      <div id="status" role="status" aria-live="polite">Idle</div>
+    </header>
+
+    <main>
+      <section aria-label="Call">
+        <div class="label">Live call</div>
+        <div id="chat" aria-live="polite">
+          <div class="empty">
+            <b>No active call</b>
+            Start an order to connect the caller to VAI.
+          </div>
+        </div>
+        <div class="controls">
+          <button id="orderBtn">Start order</button>
+          <button id="talkBtn" disabled aria-label="Start speaking">
+            <svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+              <rect x="9" y="3" width="6" height="11" rx="3"></rect>
+              <path d="M5 11a7 7 0 0 0 14 0M12 18v3"></path>
+            </svg>
+            <span id="talkLabel">Speak</span>
+          </button>
+          <div class="typebox">
+            <input id="txt" placeholder="Type instead (testing)" autocomplete="off" disabled />
+            <button id="sendTxt" disabled>Send</button>
+          </div>
+        </div>
+      </section>
+
+      <section aria-label="Orders">
+        <div class="label">Completed orders</div>
+        <div id="orders"></div>
+      </section>
+    </main>
+
+    <script>
+      let sid = null,
+        recorder = null,
+        chunks = [],
+        recording = false;
+      const $ = (id) => document.getElementById(id);
+      const esc = (s) =>
+        String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]);
+
+      function setStatus(text, state = "") {
+        $("status").textContent = text;
+        $("status").dataset.state = state;
+      }
+
+      function clearEmpty() {
+        $("chat").querySelector(".empty")?.remove();
+      }
+
+      function add(who, text, extra = "") {
+        clearEmpty();
+        const row = document.createElement("div");
+        row.className = `line ${who} ${extra}`;
+        const w = document.createElement("div");
+        w.className = "who";
+        w.textContent = who === "bot" ? "VAI" : "Customer";
+        const t = document.createElement("div");
+        t.className = "txt";
+        t.dir = "auto";
+        t.textContent = text;
+        row.append(w, t);
+        $("chat").appendChild(row);
+        $("chat").scrollTop = $("chat").scrollHeight;
+        return row;
+      }
+
+      const showPending = () => (add("bot", "...", "pending").id = "pending");
+      const hidePending = () => $("pending")?.remove();
+
+      function speak(text) {
+        return new Promise((res) => {
+          speechSynthesis.cancel();
+          const u = new SpeechSynthesisUtterance(text);
+          u.lang = /[\u0600-\u06FF]/.test(text) ? "ur-PK" : "en-US";
+          u.onend = res;
+          u.onerror = res;
+          speechSynthesis.speak(u);
+        });
+      }
+
+      function setTalking(on) {
+        recording = on;
+        $("talkBtn").classList.toggle("rec", on);
+        $("talkLabel").textContent = on ? "Done" : "Speak";
+        $("talkBtn").setAttribute("aria-label", on ? "Stop speaking" : "Start speaking");
+      }
+
+      async function handle(data) {
+        hidePending();
+        if (data.reply === null) {
+          setStatus("Didn't catch that", "live");
+          return;
+        }
+        add("you", data.user_text);
+        add("bot", data.reply);
+        setStatus("Speaking", "live");
+        await speak(data.reply);
+        if (data.done) {
+          finish();
+          loadOrders();
+        } else {
+          setStatus("Your turn", "live");
+        }
+      }
+
+      function finish() {
+        sid = null;
+        $("talkBtn").disabled = true;
+        $("sendTxt").disabled = true;
+        $("txt").disabled = true;
+        $("orderBtn").disabled = false;
+        $("orderBtn").textContent = "New order";
+        setTalking(false);
+        setStatus("Order placed", "");
+      }
+
+      async function post(url, body) {
+        try {
+          const r = await fetch(url, { method: "POST", body });
+          if (!r.ok) throw new Error(r.status);
+          return await r.json();
+        } catch {
+          hidePending();
+          setStatus("Connection problem", "");
+          return null;
+        }
+      }
+
+      $("orderBtn").onclick = async () => {
+        $("chat").innerHTML = "";
+        $("orderBtn").disabled = true;
+        setStatus("Connecting", "busy");
+        const r = await post("/start");
+        if (!r) {
+          $("orderBtn").disabled = false;
+          return;
+        }
+        sid = r.session_id;
+        add("bot", r.reply);
+        $("talkBtn").disabled = false;
+        $("sendTxt").disabled = false;
+        $("txt").disabled = false;
+        setStatus("Speaking", "live");
+        await speak(r.reply);
+        setStatus("Your turn", "live");
+      };
+
+      $("talkBtn").onclick = async () => {
+        if (!recording) {
+          let stream;
+          try {
+            stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+          } catch {
+            setStatus("Microphone blocked", "");
+            return;
+          }
+          recorder = new MediaRecorder(stream);
+          chunks = [];
+          recorder.ondataavailable = (e) => chunks.push(e.data);
+          recorder.onstop = async () => {
+            stream.getTracks().forEach((t) => t.stop());
+            setStatus("Thinking", "busy");
+            showPending();
+            const fd = new FormData();
+            fd.append("session_id", sid);
+            fd.append("audio", new Blob(chunks, { type: "audio/webm" }));
+            const data = await post("/turn", fd);
+            if (data) handle(data);
+          };
+          speechSynthesis.cancel();
+          recorder.start();
+          setTalking(true);
+          setStatus("Listening", "rec");
+        } else {
+          recorder.stop();
+          setTalking(false);
+        }
+      };
+
+      async function sendText() {
+        const t = $("txt").value.trim();
+        if (!t || !sid) return;
+        $("txt").value = "";
+        setStatus("Thinking", "busy");
+        showPending();
+        const fd = new FormData();
+        fd.append("session_id", sid);
+        fd.append("text", t);
+        const data = await post("/turn", fd);
+        if (data) handle(data);
+      }
+      $("sendTxt").onclick = sendText;
+      $("txt").addEventListener("keydown", (e) => {
+        if (e.key === "Enter") sendText();
+      });
+
+      async function loadOrders() {
+        let list = [];
+        try {
+          list = await (await fetch("/orders")).json();
+        } catch {}
+        $("orders").innerHTML =
+          list
+            .map(
+              (o) => `
+          <article class="order">
+            <div class="order-head"><b>#${esc(o.id)}</b><span>${esc(o.time)}</span></div>
+            <div class="order-body">
+              <div class="who">${esc(o.customer_name || "Guest")}${o.type ? `<span>${esc(o.type)}</span>` : ""}</div>
+              <ul>${o.items.map((i) => `<li><span class="q">${esc(i.qty)}×</span><span>${esc(i.name)}</span></li>`).join("")}</ul>
+            </div>
+            <div class="order-total"><span>Total</span><span>Rs ${esc(o.total)}</span></div>
+          </article>`,
+            )
+            .join("") ||
+          `<div class="empty"><b>No orders yet</b>Completed orders will appear here.</div>`;
+      }
+      loadOrders();
+    </script>
+  </body>
+</html>
